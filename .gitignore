@@ -11,5 +11,7 @@ terraform.tfstate*
 terraform.tfvars
 
 tmp/
+build/
+clusters/
 templates
 *.bak

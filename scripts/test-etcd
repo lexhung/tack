@@ -1,7 +1,12 @@
 #!/bin/bash -eux
 
-BASTION_IP=$(terraform output bastion-ip)
-INTERNAL_TLD=$(terraform output internal-tld)
+
+TFSTATE="$1"
+[ -z "$TFSTATE" ] && echo "Require TFSTATE as first parameter"
+CMD_TFOUTPUT='terraform output -state="${TFSTATE}"'
+
+BASTION_IP=$(${CMD_TFOUTPUT} bastion-ip)
+INTERNAL_TLD=$(${CMD_TFOUTPUT} internal-tld)
 ETCD_URL="http://etcd.${INTERNAL_TLD}:2379"
 
 SSH_CMD="ssh -A core@${BASTION_IP}"

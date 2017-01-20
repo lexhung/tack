@@ -1,6 +1,9 @@
 #!/bin/bash -eu
 
-ELB=$(terraform output external-elb)
+TFSTATE="$1"
+[ -z "$TFSTATE" ] && echo "Require TFSTATE as first parameter"
+
+ELB=$(terraform output -state="$TFSTATE" external-elb)
 
 _retry() {
   [ -z "${2}" ] && return 1
