@@ -57,31 +57,19 @@ TERRAFORM_TFVARS  := ${BUILD_DIR}/terraform.tfvars
 TERRAFORM_TFPLAN  := ${BUILD_DIR}/terraform.tfplan
 TERRAFORM_TFSTATE := ${BUILD_DIR}/terraform.tfstate
 
-CMD_TFOUTPUT := terraform output -state="${TERRAFORM_TFSTATE}"
-
-CMD_BASTION_IP = ${CMD_TFOUTPUT} bastion-ip
-CMD_ETCD1_IP = ${CMD_TFOUTPUT} etcd1-ip
-CMD_NAME = ${CMD_TFOUTPUT} name
-CMD_REGION = ${CMD_TFOUTPUT} region
-CMD_INTERNAL_TLD = ${CMD_TFOUTPUT} internal-tld
-
 DIR_KEY_PAIR := ${BUILD_DIR}/keypair
 DIR_SSL := ${BUILD_DIR}/cfssl
 DIR_ADDONS := ${BUILD_DIR}/addons
 DIR_TMP := ${BUILD_DIR}/tmp
 
+CMD_TFOUTPUT := terraform output -state="${TERRAFORM_TFSTATE}"
 # ∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨
 
-
-${DIR_ADDONS}:
-	@echo "${BLUE}❤ initialize add-ons ${NC}"
-	@./scripts/init-addons "${TERRAFORM_TFSTATE}" "${DIR_ADDONS}"
-	@echo "${GREEN}✓ initialize add-ons - success ${NC}\n"
 
 ## generate key-pair, variables and then `terraform apply`
 all: prereqs create-keypair ssl init apply
 	@echo "${GREEN}✓ terraform portion of 'make all' has completed ${NC}\n"
-	@$(MAKE) wait-for-cluster "${TERRAFORM_TFSTATE}"
+	@$(MAKE) wait-for-cluster
 	@$(MAKE) ${DIR_ADDONS}
 	@$(MAKE) create-addons
 	@$(MAKE) create-busybox
@@ -100,7 +88,15 @@ all: prereqs create-keypair ssl init apply
 	@echo "Status summaries:"
 	@echo "% make status"
 
-${DIR_SSL}: ; ./scripts/init-cfssl ${DIR_SSL} ${AWS_REGION} ${INTERNAL_TLD} ${K8S_SERVICE_IP}
+${DIR_SSL}:
+	scripts/init-cfssl ${DIR_SSL} ${AWS_REGION} ${INTERNAL_TLD} ${K8S_SERVICE_IP}
+
+${DIR_ADDONS}:
+	$(eval CLUSTER_DOMAIN := $(shell ${CMD_TFOUTPUT} cluster-domain))
+	$(eval DNS_SERVICE_IP := $(shell ${CMD_TFOUTPUT} dns-service-ip))
+	@echo "${BLUE}❤ initialize add-ons ${NC}"
+	@scripts/init-addons "${DIR_ADDONS}" "${INTERNAL_TLD}" "${CLUSTER_DOMAIN}" "${DNS_SERVICE_IP}"
+	@echo "${GREEN}✓ initialize add-ons - success ${NC}\n"
 
 ## destroy and remove everything
 clean: destroy delete-keypair close-proxy
@@ -132,12 +128,12 @@ dashboard:	close-proxy
 	@scripts/dashboard ${PROXY_PORT}
 
 ## show instance information
-instances:
-	@scripts/instances `${CMD_NAME}`  `${CMD_REGION}`
+instances: .tfstate
+	@scripts/instances ${STATE_NAME} ${STATE_REGION}
 
 ## journalctl on etcd1
-journal:
-	@scripts/ssh ${DIR_KEY_PAIR}/${AWS_EC2_KEY_NAME}.pem `${CMD_BASTION_IP}` "ssh `${CMD_BASTION_IP}` journalctl -fl"
+journal: .tfstate
+	@scripts/ssh ${DIR_KEY_PAIR}/${AWS_EC2_KEY_NAME}.pem ${STATE_BASTION_IP} "ssh ${STATE_BASTION_IP} journalctl -fl"
 
 prereqs:
 	@mkdir -p ${BUILD_DIR}
@@ -152,12 +148,12 @@ prereqs:
 	terraform --version
 
 ## ssh into etcd1
-ssh:
-	@scripts/ssh ${DIR_KEY_PAIR}/${AWS_EC2_KEY_NAME}.pem `${CMD_BASTION_IP}` "ssh `${CMD_ETCD1_IP}`"
+ssh: .tfstate
+	@scripts/ssh ${DIR_KEY_PAIR}/${AWS_EC2_KEY_NAME}.pem ${STATE_BASTION_IP} "ssh ${STATE_ETCD1_IP}"
 
 ## ssh into bastion host
-ssh-bastion:
-	@scripts/ssh ${DIR_KEY_PAIR}/${AWS_EC2_KEY_NAME}.pem `${CMD_BASTION_IP}`
+ssh-bastion:.tfstate
+	@scripts/ssh ${DIR_KEY_PAIR}/${AWS_EC2_KEY_NAME}.pem ${STATE_BASTION_IP}
 
 ## status
 status: instances
@@ -170,12 +166,15 @@ status: instances
 ## create tls artifacts
 ssl: ${DIR_SSL}
 
+addons: ${DIR_ADDONS}
+
 ## smoke it
 test: test-ssl test-route53 test-etcd pods dns
 
 wait-for-cluster:
+	$(eval EXTERNAL_ELB := $(shell ${CMD_TFOUTPUT} external-elb))
 	@echo "${BLUE}❤ wait-for-cluster ${NC}"
-	@scripts/wait-for-cluster "${TERRAFORM_TFSTATE}"
+	@scripts/wait-for-cluster "${EXTERNAL_ELB}"
 	@echo "${GREEN}✓ wait-for-cluster - success ${NC}\n"
 
 include makefiles/*.mk

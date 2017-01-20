@@ -1,11 +1,19 @@
 .terraform: ; terraform get
 
 ${TERRAFORM_TFVARS}:
-	@./scripts/init-variables \
+	@scripts/init-variables \
 		${AWS_REGION} ${COREOS_CHANNEL} ${COREOS_VM_TYPE} ${AWS_EC2_KEY_NAME} \
 		${INTERNAL_TLD} ${CLUSTER_NAME} `scripts/myip` ${CIDR_VPC} ${CIDR_PODS} \
-		${CIDR_SERVICE_CLUSTER} ${K8S_SERVICE_IP} ${K8S_DNS_IP} ${ETCD_IPS} ${HYPERKUBE_IMAGE} ${HYPERKUBE_TAG} \
+		${CIDR_SERVICE_CLUSTER} ${K8S_SERVICE_IP} ${K8S_DNS_IP} ${ETCD_IPS} \
+		${HYPERKUBE_IMAGE} ${HYPERKUBE_TAG} \
 		${BUILD_DIR} ${DIR_SSL} ${DIR_KEY_PAIR} ${DIR_TMP}
+
+.tfstate:
+	$(eval STATE_BASTION_IP := $(shell ${CMD_TFOUTPUT} bastion-ip))
+	$(eval STATE_INTERNAL_TLD := $(shell ${CMD_TFOUTPUT} internal-tld))
+	$(eval STATE_NAME := $(shell ${CMD_TFOUTPUT} name))
+	$(eval STATE_REGION := $(shell ${CMD_TFOUTPUT} region))
+	$(eval STATE_ETCD1_IP := $(shell ${CMD_TFOUTPUT} etcd1-ip))
 
 module.%:
 	@echo "${BLUE}❤ make $@ - commencing${NC}"

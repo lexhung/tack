@@ -1,15 +1,9 @@
 #!/bin/bash -eu
 
-TFSTATE="$1"
-[ -z "$TFSTATE" ] && echo "Require TFSTATE as first parameter"
-
-TFOUTPUT="terraform output -state=${TFSTATE}"
-
-CLUSTER_DOMAIN=$(${TFOUTPUT} cluster-domain)
-DNS_SERVICE_IP=$(${TFOUTPUT} dns-service-ip)
-INTERNAL_TLD=$(${TFOUTPUT} internal-tld)
-
-OUTDIR="$2"
+OUTDIR="$1"
+INTERNAL_TLD="$2"
+CLUSTER_DOMAIN="$3"
+DNS_SERVICE_IP="$4"
 
 echo "❤ Patching addon scripts "
 
