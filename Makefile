@@ -18,6 +18,8 @@ CLUSTER_NAME ?= test
 AWS_EC2_KEY_NAME ?= kz8s-$(CLUSTER_NAME)
 TOP_LEVEL_DOMAIN ?= kz8s
 
+PROXY_PORT ?= 8001
+
 # CIDR_PODS: flannel overlay range
 # - https://coreos.com/flannel/docs/latest/flannel-config.html
 #
@@ -101,8 +103,7 @@ all: prereqs create-keypair ssl init apply
 ${DIR_SSL}: ; ./scripts/init-cfssl ${DIR_SSL} ${AWS_REGION} ${INTERNAL_TLD} ${K8S_SERVICE_IP}
 
 ## destroy and remove everything
-clean: destroy delete-keypair
-	@-pkill -f "kubectl proxy" ||:
+clean: destroy delete-keypair close-proxy
 	@-rm -rf .terraform ||:
 	@-rm ${BUILD_DIR}/terraform.tfvars ||:
 	@-rm ${BUILD_DIR}/terraform.tfplan ||:
@@ -121,8 +122,14 @@ create-busybox:
 	kubectl create -f test/pods/busybox.yml
 	@echo "${GREEN}✓ create busybox test pod - success ${NC}\n"
 
+close-proxy:
+	@echo "${BLUE}❤ Closing any existing proxy tunnel ${NC}"
+	@-pkill -f "kubectl proxy"
+	@echo "${GREEN}✓ Proxy closed ${NC}\n"
+
 ## start proxy and open kubernetes dashboard
-dashboard: ; @./scripts/dashboard
+dashboard:	close-proxy
+	@scripts/dashboard ${PROXY_PORT}
 
 ## show instance information
 instances:

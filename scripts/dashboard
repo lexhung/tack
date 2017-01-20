@@ -1,5 +1,14 @@
 #!/bin/bash -u
 
+PROXY_PORT="$1"
+DASHBOARD_URL="http://localhost:${PROXY_PORT}/ui"
+
+_retry() {
+  [ -z "${2}" ] && return 1
+  echo -n ${1}
+  until printf "." && "${@:2}" &>/dev/null; do sleep 1.2; done; echo "✓"
+}
+
 case "${OSTYPE}" in
  linux*)
     OPEN="xdg-open"
@@ -15,8 +24,9 @@ command -v ${OPEN} &> /dev/null
 kubectl cluster-info &> /dev/null
 [ $? -ne 0 ] && ( echo "cluster is not healthy" ; exit 1 )
 
-kubectl proxy &
+kubectl proxy --port=${PROXY_PORT} &
 echo "✓ kubectl proxy is listening"
+_retry "❤ Waiting for local proxy to become online" curl -sSf "${DASHBOARD_URL}"
 
-${OPEN} http://localhost:8001/ui
-sleep 1 && echo " "
+${OPEN} ${DASHBOARD_URL}
+
