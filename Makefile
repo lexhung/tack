@@ -152,7 +152,7 @@ ssh: .tfstate
 	@scripts/ssh ${DIR_KEY_PAIR}/${AWS_EC2_KEY_NAME}.pem ${STATE_BASTION_IP} "ssh ${STATE_ETCD1_IP}"
 
 ## ssh into bastion host
-ssh-bastion:.tfstate
+ssh-bastion: .tfstate
 	@scripts/ssh ${DIR_KEY_PAIR}/${AWS_EC2_KEY_NAME}.pem ${STATE_BASTION_IP}
 
 ## status
