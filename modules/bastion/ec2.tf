@@ -7,47 +7,32 @@ resource "aws_instance" "bastion" {
 
   # TODO: force private_ip to prevent collision with etcd machines
 
-  vpc_security_group_ids = [
-    "${ var.security-group-id }",
-  ]
-
   source_dest_check = false
   subnet_id = "${ element( split(",", var.subnet-ids), 0 ) }"
 
   tags  {
-    Name = "bastion"
-    Cluster = "${ var.name }"
-    Role = "bastion"
     builtWith = "terraform"
+    kz8s = "${ var.name }"
+    depends-id = "${ var.depends-id }"
+    Name = "kz8s-bastion"
+    role = "bastion"
   }
 
-  /*user_data = "${ var.user-data }"*/
-  user_data = <<EOF
-#cloud-config
+  user_data = "${ data.template_file.user-data.rendered }"
 
----
-coreos:
-  update:
-    reboot-strategy: etcd-lock
+  vpc_security_group_ids = [
+    "${ var.security-group-id }",
+  ]
+}
 
-  etcd2:
-    discovery-srv: k8s
-    proxy: on
+data "template_file" "user-data" {
+  template = "${ file( "${ path.module }/user-data.yml" )}"
 
-  units:
-    - name: etcd2.service
-      command: start
-    - name: s3-iam-get.service
-      command: start
-      content: |
-        [Unit]
-        Description=s3-iam-get
-        [Service]
-        Type=oneshot
-        RemainAfterExit=yes
-        ExecStartPre=-/usr/bin/mkdir -p /opt/bin
-        ExecStartPre=/usr/bin/curl -L -o /opt/bin/s3-iam-get \
-          https://raw.githubusercontent.com/kz8s/s3-iam-get/master/s3-iam-get
-        ExecStart=/usr/bin/chmod +x /opt/bin/s3-iam-get
-EOF
+  vars {
+    internal-tld = "${ var.internal-tld }"
+  }
+}
+
+resource "null_resource" "dummy_dependency" {
+  depends_on = [ "aws_instance.bastion" ]
 }

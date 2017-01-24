@@ -1,8 +1,14 @@
 # circle.yml
+general:
+  branches:
+    only:
+      - master
+      - test
+
 machine:
   environment:
     CFSSL_VERSION: R1.2
-    TERRAFORM_VERSION: 0.6.16
+    TERRAFORM_VERSION: 0.7.3
 
 dependencies:
   pre:
@@ -14,9 +20,9 @@ dependencies:
 
 test:
   pre:
-    - make ssl init
-  override:
-    - make plan
+    - make ssl
+  # override:
+  #  - make plan
   # post:
   #   - make clean
 

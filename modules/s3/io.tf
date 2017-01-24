@@ -1,7 +1,11 @@
 variable "bucket-prefix" {}
 variable "hyperkube-image" {}
-variable "k8s-version" {}
+variable "hyperkube-tag" {}
+variable "depends-id" {}
+variable "internal-tld" {}
 variable "name" {}
-variable "podmaster-image" {}
+variable "region" {}
+variable "service-cluster-ip-range" {}
 
 output "bucket-prefix" { value = "${ var.bucket-prefix }" }
+output "depends-id" { value = "${ null_resource.dummy_dependency.id }" }

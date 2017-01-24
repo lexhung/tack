@@ -3,8 +3,8 @@ resource "aws_route53_zone" "internal" {
   name = "${ var.internal-tld }"
   tags {
     builtWith = "terraform"
-    Cluster = "${ var.name }"
-    Name = "k8s"
+    KubernetesCluster = "${ var.name }"
+    Name = "k8s-${ var.name }"
   }
   vpc_id = "${ var.vpc-id }"
 }
@@ -31,34 +31,31 @@ resource "aws_route53_record" "A-etcds" {
 
 resource "aws_route53_record" "CNAME-master" {
   name = "master"
-  records = [ "etcd.k8s" ]
+  records = [ "etcd.${ var.internal-tld }" ]
   ttl = "300"
   type = "CNAME"
   zone_id = "${ aws_route53_zone.internal.zone_id }"
-}
-
-resource "template_file" "discover-client" {
-  count = "${ length( split(",", var.etcd-ips) ) }"
-  template = "0 0 2379 etcd${ count.index + 1 }.k8s"
-}
-
-resource "template_file" "discover-server" {
-  count = "${ length( split(",", var.etcd-ips) ) }"
-  template = "0 0 2380 etcd${ count.index + 1 }.k8s"
 }
 
 resource "aws_route53_record" "etcd-client-tcp" {
   name = "_etcd-client._tcp"
   ttl = "300"
   type = "SRV"
-  records = [ "${ template_file.discover-client.*.rendered }" ]
+  records = [ "${ formatlist("0 0 2379 %v", aws_route53_record.A-etcds.*.fqdn) }" ]
   zone_id = "${ aws_route53_zone.internal.zone_id }"
 }
 
 resource "aws_route53_record" "etcd-server-tcp" {
-  name = "_etcd-server._tcp"
+  name = "_etcd-server-ssl._tcp"
   ttl = "300"
   type = "SRV"
-  records = [ "${ template_file.discover-server.*.rendered }" ]
+  records = [ "${ formatlist("0 0 2380 %v", aws_route53_record.A-etcds.*.fqdn) }" ]
   zone_id = "${ aws_route53_zone.internal.zone_id }"
+}
+
+resource "null_resource" "dummy_dependency" {
+  depends_on = [
+    "aws_route53_record.etcd-server-tcp",
+    "aws_route53_record.A-etcd",
+  ]
 }
