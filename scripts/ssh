@@ -24,4 +24,6 @@ trap finish EXIT
 
 ssh-add ${KEY_FILE}
 
+echo "!Make sure that you allowed the traffic to the public IP in VPC rule!"
+echo Executing "[ssh -tA core@${BASTION_IP} ${COMMAND}]"
 ssh -tA core@${BASTION_IP} ${COMMAND}

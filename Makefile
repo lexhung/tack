@@ -5,8 +5,10 @@ GREEN := \033[0;32m
 RED := \033[0;31m
 NC := \033[0m
 
-CLUSTER ?= default
-include clusters/${CLUSTER}/config
+ENV ?= .no-cluster-configuration-provided.
+CLUSTER_CONFIG := clusters/${ENV}/config
+include ${CLUSTER_CONFIG}
+
 
 # ∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨
 
@@ -108,16 +110,13 @@ clean: destroy delete-keypair close-proxy
 	@-rm -rf ${DIR_ADDONS} ||:
 	@-rm -rf ${DIR_SSL} ||:
 
-create-addons:
-	@echo "${BLUE}❤ create add-ons ${NC}"
-	kubectl create -f ${BUILD_DIR}/addons/
-	@echo "${GREEN}✓ create add-ons - success ${NC}\n"
 
 create-busybox:
 	@echo "${BLUE}❤ create busybox test pod ${NC}"
 	kubectl create -f test/pods/busybox.yml
 	@echo "${GREEN}✓ create busybox test pod - success ${NC}\n"
 
+## Close any running proxy instance
 close-proxy:
 	@echo "${BLUE}❤ Closing any existing proxy tunnel ${NC}"
 	@-pkill -f "kubectl proxy"
@@ -166,7 +165,14 @@ status: instances
 ## create tls artifacts
 ssl: ${DIR_SSL}
 
-addons: ${DIR_ADDONS}
+## create addons templates
+init-addons: ${DIR_ADDONS}
+
+## actually create addon resources with [kubectl]
+create-addons: init-addons
+	@echo "${BLUE}❤ create add-ons ${NC}"
+	kubectl create -f ${BUILD_DIR}/addons/
+	@echo "${GREEN}✓ create add-ons - success ${NC}\n"
 
 ## smoke it
 test: test-ssl test-route53 test-etcd pods dns
