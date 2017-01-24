@@ -1,4 +1,4 @@
-$(DIR_KEY_PAIR)/: ; mkdir -p $@
+$(DIR_KEY_PAIR)/: ; @mkdir -p $@
 
 $(DIR_KEY_PAIR)/$(AWS_EC2_KEY_NAME).pem: | $(DIR_KEY_PAIR)/
 	@aws --region ${AWS_REGION} ec2 create-key-pair \

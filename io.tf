@@ -53,6 +53,11 @@ variable "vpc-existing" {
   }
 }
 
+variable "build-dir" {}
+variable "dir-tmp" {}
+variable "dir-ssl" {}
+variable "dir-keypair" {}
+
 # outputs
 output "azs" { value = "${ var.aws["azs"] }" }
 output "bastion-ip" { value = "${ module.bastion.ip }" }

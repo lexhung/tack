@@ -5,17 +5,22 @@ GREEN := \033[0;32m
 RED := \033[0;31m
 NC := \033[0m
 
+ENV ?= .no-cluster-configuration-provided.
+CLUSTER_CONFIG := clusters/${ENV}/config
+include ${CLUSTER_CONFIG}
+
 
 # ∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨
 
-AWS_REGION ?= us-east-1
+AWS_REGION ?= us-west-1
 COREOS_CHANNEL ?= stable
 COREOS_VM_TYPE ?= hvm
 
 CLUSTER_NAME ?= test
 AWS_EC2_KEY_NAME ?= kz8s-$(CLUSTER_NAME)
+TOP_LEVEL_DOMAIN ?= kz8s
 
-INTERNAL_TLD := ${CLUSTER_NAME}.kz8s
+PROXY_PORT ?= 8001
 
 # CIDR_PODS: flannel overlay range
 # - https://coreos.com/flannel/docs/latest/flannel-config.html
@@ -46,20 +51,28 @@ HYPERKUBE_TAG ?= v1.5.1_coreos.0
 
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+AWS_EC2_KEY_NAME := kz8s-$(CLUSTER_NAME)
+INTERNAL_TLD := ${CLUSTER_NAME}.${TOP_LEVEL_DOMAIN}
+BUILD_DIR := build/${INTERNAL_TLD}
 
-DIR_KEY_PAIR := .keypair
-DIR_SSL := .cfssl
+TERRAFORM_TFVARS  := ${BUILD_DIR}/terraform.tfvars
+TERRAFORM_TFPLAN  := ${BUILD_DIR}/terraform.tfplan
+TERRAFORM_TFSTATE := ${BUILD_DIR}/terraform.tfstate
 
-.addons:
-	@echo "${BLUE}❤ initialize add-ons ${NC}"
-	@./scripts/init-addons
-	@echo "${GREEN}✓ initialize add-ons - success ${NC}\n"
+DIR_KEY_PAIR := ${BUILD_DIR}/keypair
+DIR_SSL := ${BUILD_DIR}/cfssl
+DIR_ADDONS := ${BUILD_DIR}/addons
+DIR_TMP := ${BUILD_DIR}/tmp
+
+CMD_TFOUTPUT := terraform output -state="${TERRAFORM_TFSTATE}"
+# ∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨
+
 
 ## generate key-pair, variables and then `terraform apply`
 all: prereqs create-keypair ssl init apply
 	@echo "${GREEN}✓ terraform portion of 'make all' has completed ${NC}\n"
 	@$(MAKE) wait-for-cluster
-	@$(MAKE) .addons
+	@$(MAKE) ${DIR_ADDONS}
 	@$(MAKE) create-addons
 	@$(MAKE) create-busybox
 	kubectl get no
@@ -77,40 +90,52 @@ all: prereqs create-keypair ssl init apply
 	@echo "Status summaries:"
 	@echo "% make status"
 
-.cfssl: ; ./scripts/init-cfssl ${DIR_SSL} ${AWS_REGION} ${INTERNAL_TLD} ${K8S_SERVICE_IP}
+${DIR_SSL}:
+	scripts/init-cfssl ${DIR_SSL} ${AWS_REGION} ${INTERNAL_TLD} ${K8S_SERVICE_IP}
+
+${DIR_ADDONS}:
+	$(eval CLUSTER_DOMAIN := $(shell ${CMD_TFOUTPUT} cluster-domain))
+	$(eval DNS_SERVICE_IP := $(shell ${CMD_TFOUTPUT} dns-service-ip))
+	@echo "${BLUE}❤ initialize add-ons ${NC}"
+	@scripts/init-addons "${DIR_ADDONS}" "${INTERNAL_TLD}" "${CLUSTER_DOMAIN}" "${DNS_SERVICE_IP}"
+	@echo "${GREEN}✓ initialize add-ons - success ${NC}\n"
 
 ## destroy and remove everything
-clean: destroy delete-keypair
-	@-pkill -f "kubectl proxy" ||:
-	@-rm -rf .addons ||:
-	@-rm terraform.tfvars ||:
-	@-rm terraform.tfplan ||:
+clean: destroy delete-keypair close-proxy
 	@-rm -rf .terraform ||:
-	@-rm -rf tmp ||:
+	@-rm ${BUILD_DIR}/terraform.tfvars ||:
+	@-rm ${BUILD_DIR}/terraform.tfplan ||:
+	@-rm -rf ${DIR_TMP} ||:
+	@-rm -rf ${DIR_KEY_PAIR} ||:
+	@-rm -rf ${DIR_ADDONS} ||:
 	@-rm -rf ${DIR_SSL} ||:
 
-create-addons:
-	@echo "${BLUE}❤ create add-ons ${NC}"
-	kubectl create -f .addons/
-	@echo "${GREEN}✓ create add-ons - success ${NC}\n"
 
 create-busybox:
 	@echo "${BLUE}❤ create busybox test pod ${NC}"
 	kubectl create -f test/pods/busybox.yml
 	@echo "${GREEN}✓ create busybox test pod - success ${NC}\n"
 
+## Close any running proxy instance
+close-proxy:
+	@echo "${BLUE}❤ Closing any existing proxy tunnel ${NC}"
+	@-pkill -f "kubectl proxy"
+	@echo "${GREEN}✓ Proxy closed ${NC}\n"
+
 ## start proxy and open kubernetes dashboard
-dashboard: ; @./scripts/dashboard
+dashboard:	close-proxy
+	@scripts/dashboard ${PROXY_PORT}
 
 ## show instance information
-instances:
-	@scripts/instances `terraform output name` `terraform output region`
+instances: .tfstate
+	@scripts/instances ${STATE_NAME} ${STATE_REGION}
 
 ## journalctl on etcd1
-journal:
-	@scripts/ssh ${DIR_KEY_PAIR}/${AWS_EC2_KEY_NAME}.pem `terraform output bastion-ip` "ssh `terraform output etcd1-ip` journalctl -fl"
+journal: .tfstate
+	@scripts/ssh ${DIR_KEY_PAIR}/${AWS_EC2_KEY_NAME}.pem ${STATE_BASTION_IP} "ssh ${STATE_BASTION_IP} journalctl -fl"
 
 prereqs:
+	@mkdir -p ${BUILD_DIR}
 	aws --version
 	@echo
 	cfssl version
@@ -122,12 +147,12 @@ prereqs:
 	terraform --version
 
 ## ssh into etcd1
-ssh:
-	@scripts/ssh ${DIR_KEY_PAIR}/${AWS_EC2_KEY_NAME}.pem `terraform output bastion-ip` "ssh `terraform output etcd1-ip`"
+ssh: .tfstate
+	@scripts/ssh ${DIR_KEY_PAIR}/${AWS_EC2_KEY_NAME}.pem ${STATE_BASTION_IP} "ssh ${STATE_ETCD1_IP}"
 
 ## ssh into bastion host
-ssh-bastion:
-	@scripts/ssh ${DIR_KEY_PAIR}/${AWS_EC2_KEY_NAME}.pem `terraform output bastion-ip`
+ssh-bastion: .tfstate
+	@scripts/ssh ${DIR_KEY_PAIR}/${AWS_EC2_KEY_NAME}.pem ${STATE_BASTION_IP}
 
 ## status
 status: instances
@@ -138,14 +163,24 @@ status: instances
 	kubectl exec busybox -- nslookup kubernetes
 
 ## create tls artifacts
-ssl: .cfssl
+ssl: ${DIR_SSL}
+
+## create addons templates
+init-addons: ${DIR_ADDONS}
+
+## actually create addon resources with [kubectl]
+create-addons: init-addons
+	@echo "${BLUE}❤ create add-ons ${NC}"
+	kubectl create -f ${BUILD_DIR}/addons/
+	@echo "${GREEN}✓ create add-ons - success ${NC}\n"
 
 ## smoke it
 test: test-ssl test-route53 test-etcd pods dns
 
 wait-for-cluster:
+	$(eval EXTERNAL_ELB := $(shell ${CMD_TFOUTPUT} external-elb))
 	@echo "${BLUE}❤ wait-for-cluster ${NC}"
-	@scripts/wait-for-cluster
+	@scripts/wait-for-cluster "${EXTERNAL_ELB}"
 	@echo "${GREEN}✓ wait-for-cluster - success ${NC}\n"
 
 include makefiles/*.mk
