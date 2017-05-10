@@ -5,12 +5,20 @@ GREEN := \033[0;32m
 RED := \033[0;31m
 NC := \033[0m
 
+# Fail the build if no ENV provided. 
+#  Have a default configuration is convenient,
+#  However, it makes accidentally destroy/modify default cluster easier.
 ENV ?= .no-cluster-configuration-provided.
 CLUSTER_CONFIG := clusters/${ENV}/config
+
+# Not used here but might be useful later 
+CLUSTER_DIR := clusters/${ENV}
+
+# Populate the cluster variables
 include ${CLUSTER_CONFIG}
 
-
-# ∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨
+# Cluster Variables. Customizable with ENV=<config>
+# ∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨∨vvvvvv
 
 AWS_REGION ?= us-west-1
 COREOS_CHANNEL ?= stable
@@ -50,6 +58,7 @@ HYPERKUBE_TAG ?= v1.5.1_coreos.0
 # K8S_DNS_IP ?= 172.16.0.10
 
 # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+# End Cluster Variables
 
 AWS_EC2_KEY_NAME := kz8s-$(CLUSTER_NAME)
 INTERNAL_TLD := ${CLUSTER_NAME}.${TOP_LEVEL_DOMAIN}
