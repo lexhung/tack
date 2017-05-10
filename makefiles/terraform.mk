@@ -9,7 +9,7 @@ ${TERRAFORM_TFVARS}:
 		${BUILD_DIR} ${DIR_SSL} ${DIR_KEY_PAIR} ${DIR_TMP}
 
 ## Read common state values from terraform.tfstate. This might different to
-## values stored in configuration files due to changes was not applied.
+## values stored in configuration files due to changes did not applied.
 .tfstate:
 	$(eval STATE_BASTION_IP := $(shell ${CMD_TFOUTPUT} bastion-ip))
 	$(eval STATE_INTERNAL_TLD := $(shell ${CMD_TFOUTPUT} internal-tld))
